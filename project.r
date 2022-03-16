@@ -21,22 +21,9 @@ apiCallShopId <- function(shop_id){
   return(jsonData)
 }
 
-# This function takes in the list we got from the apiCallShopId to get the name
-getShopName <- function(data){
-  if(!is.null(data)){
-    return(data$name)
-  }
-  return(NULL)
-}
-
-apiCall <- apiCallShopId(194330690)
-
-shop_name <- apiCall$account$username
-
 count <- 0
 for(i in shopIds){
   data <- apiCallShopId(i)
-  name <- getShopName(data)
   df <- data.frame(matrix(ncol = 10, nrow = 0))
   colnames(df) <- c('id', 'shop_name', 'is_shopee_verified', 'is_preferred_plus_seller', 'rating_star', 'response_rate', 'follower_count', 'rating_bad', 'rating_good', 'rating_normal')
   df <- c(i, data$name, data$is_shopee_verified, data$is_preferred_plus_seller, data$rating_star, data$response_rate, data$follower_count, data$rating_bad, data$rating_good, data$rating_normal)
@@ -44,14 +31,4 @@ for(i in shopIds){
   names(df_shopId) <- c('id', 'shop_name', 'is_shopee_verified', 'is_preferred_plus_seller', 'rating_star', 'response_rate', 'follower_count', 'rating_bad', 'rating_good', 'rating_normal')
   count <- count + 1
   print(count)
-  print(df)
 }
-
-data <- apiCallShopId(10891360)
-name <- getShopName(data)
-df <- data.frame(matrix(ncol = 2, nrow = 0))
-colnames(df) <- c('id', 'shop_name')
-df <- c(10891360, name)
-df_shopId <- rbind(df_shopId, df)
-print(i)
-print(df)
