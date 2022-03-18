@@ -61,18 +61,12 @@ for(i in shopIds){
 
 #The following added by Amy
 
-#concatenate
+#concatenate shopid and userid
 orderBrush1 <- orderBrush
 orderBrush1$shopid_userid <- paste(orderBrush1$shopid,orderBrush1$userid, sep = "")
+
+#set event_time as date and time format
 orderBrush1$event_time <- as.POSIXlt(orderBrush1$event_time)
-
-#retrieve hour
-hour <- as.data.frame(orderBrush1$event_time)
-colnames(hour) <- c('hours')
-hour$hours <- format(as.POSIXct(hour$hours), format = "%H")
-
-#bind hour to the 
-orderBrush1 <- cbind(orderBrush1, hour)
 
 #order the column shopid_userid by ascending order
 orderBrush1 <- orderBrush1[order(orderBrush1$shopid_userid),]
@@ -80,12 +74,52 @@ orderBrush1 <- orderBrush1[order(orderBrush1$shopid_userid),]
 #find duplicated shopid_userid
 orderBrush1$duplicate <- duplicated(orderBrush1$shopid_userid) | duplicated(orderBrush1$shopid_userid, fromLast = TRUE)
 
-#find those with multiple order place within an hour
-#.......
+#find those shopid_userid that with multiple orders place
+orderBrush_multipleorder <- orderBrush1[orderBrush1$duplicate == TRUE,]
 
-#Excel formula
-#for line 1
-#=IF(AND(E2=E3,AND((F2-F3)>=-1,(F2-F3)<=1)),1,0)
-#for line 2
-#=IF(OR(AND(E3=E4,AND((F3-F4)>=-1,(F3-F4)<=1)),AND(E3=E2,AND((F3-F2)>=-1,(F3-F2)<=1))),1,0)
+#find frequency of order for the shopid_userid
+freq_orderBrush_multipleorder <- as.data.frame(table(orderBrush_multipleorder$shopid_userid))
+colnames(freq_orderBrush_multipleorder) <- c("shopid_userid", "frequency")
 
+orderBrush_multipleorder_freq <- merge(x = orderBrush_multipleorder, y = freq_orderBrush_multipleorder,
+                                       by = "shopid_userid")
+
+#find those with more than 3 orders
+orderBrush_multipleorder_freq <- orderBrush_multipleorder_freq[orderBrush_multipleorder_freq$frequency >= 3,]
+
+#find the time different between each row (in seconds), assign zero to first row
+orderBrush_multipleorder_freq$diff_time <- c(0, diff(orderBrush_multipleorder_freq$event_time))
+
+#identify those order that place within an hour (3600 seconds)
+#1 mean order place within an hour
+#0 mean order place not wihitn an hour
+for(i in 1:length(orderBrush_multipleorder_freq$diff_time)){
+  if( orderBrush_multipleorder_freq$diff_time[i] >= -3600 && orderBrush_multipleorder_freq$diff_time[i] <= 3600){
+    orderBrush_multipleorder_freq$brushing[i] <- 1
+  } else {
+    orderBrush_multipleorder_freq$brushing[i] <- 0
+  }
+}
+
+#only orders that being identify as brushing
+orderBrush2 <- orderBrush_multipleorder_freq[orderBrush_multipleorder_freq$brushing == 1,]
+
+#find the frequency of shopid_userid
+freq_orderBrush2 <- as.data.frame(table(orderBrush2$shopid_userid))
+colnames(freq_orderBrush2) <- c("shopid_userid", "frequency")
+
+freq_orderBrush2 <- merge(x = orderBrush2, y = freq_orderBrush2,
+                                       by = "shopid_userid")
+
+#find order with frequency more than equal to 2
+#this is because those with frequency 1 should not be brushing
+freq_orderBrush2 <- freq_orderBrush2[freq_orderBrush2$frequency.y >= 2,]
+
+#total 743 group of order brushing 
+unique(freq_orderBrush2$shopid_userid)
+
+#total 388 shops that suspect to have order brushing 
+unique(freq_orderBrush2$shopid)
+
+#total 673 users that suspect to have order brushing
+unique(freq_orderBrush2$userid)
