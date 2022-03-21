@@ -59,4 +59,5 @@ for(i in shopIds){
   print(count)
 }
 
+hello <- "hi"
 
