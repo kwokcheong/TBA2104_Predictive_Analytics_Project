@@ -27,6 +27,7 @@ data <- read_excel('main_data_cleaned.xlsx')
 
 
 # reformatting data
-data <- subset(data, select = -c(Shop.Followers.Cat, Shop.Rating))
 
-data <- rename(data, c("Verified" = "Verified..Yes.No." , "Shop.Rating" = "Shop.Rating..1.5.", "Bad.Comments" = "Comments.w.rating..3.Count", "Normal.Comments" = "Comments.w.ratings...3..4", "Good.Comments" = "Comments.w.ratings")) 
+data <- rename(data, c("Verified" = "Verified..Yes.No." , "Shop.Rating.Value" = "Shop.Rating..1.5.", "Bad.Comments" = "Comments.w.rating..3.Count", "Normal.Comments" = "Comments.w.ratings...3..4", "Good.Comments" = "Comments.w.ratings")) 
+
+write.xlsx(data,file="main_data_cleaned_v2.xlsx", sheetName="Order_brush",col.names = TRUE)
