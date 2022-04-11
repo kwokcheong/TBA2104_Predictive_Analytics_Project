@@ -1,0 +1,221 @@
+---
+title: "Shopee_Order_Brush"
+author: "Kwok Cheong, Shu Min, Amy"
+date: "4/10/2022"
+output:
+  html_document:
+    fig_width: 14
+    fig_height: 8
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Bring in library
+
+```{r echo=TRUE,results= 'hide',error=FALSE,message=FALSE,warning=FALSE}
+library(foreign)
+library(ggplot2)
+library(dplyr)
+library(e1071)
+library(corrplot)
+library(randomForest)
+library(naivebayes)
+library(caret)
+library(vcd)
+library(gridExtra)
+library(ggeffects)
+library(smotefamily)
+```
+
+## Data Preprocess
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+data <- read.csv("main_data_cleaned_v4.csv", header = TRUE)
+
+# data preprocess
+data$Orderbrush <- as.factor(data$Orderbrush)
+data$Verified <- as.factor(data$Verified)
+data$Shop.Followers.Cat <- as.factor(data$Shop.Followers.Cat)
+data$Shop.Rating <- as.factor(data$Shop.Rating)
+
+str(data)
+
+numData <- data[,3:15]
+
+set.seed(122)
+train_index <- createDataPartition(numData$Orderbrush, p=0.75, list= FALSE)
+train <- numData[train_index, ] # 75% of the data
+test <- numData[-train_index, ] # 25% of the data
+
+
+```
+## Data preprocess 2
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+
+# for plotting purposes (corplot)
+data_numeric <- subset(data, select = -c(Shop.Followers.Cat, Verified, Shop.Rating))
+data_numeric <- data_numeric[,2:12]
+data_numeric$Orderbrush <- as.numeric(data_numeric$Orderbrush) - 1
+
+# if you only wan numeric and non categorical data, mainly using to do SMOTE
+train_numeric <- subset(train, select = -c(Shop.Followers.Cat, Verified, Shop.Rating))
+test_numeric <- subset(test, select = -c(Shop.Followers.Cat, Verified, Shop.Rating))
+train_numeric$Orderbrush <- as.numeric(train_numeric$Orderbrush) - 1
+test_numeric$Orderbrush <- as.numeric(test_numeric$Orderbrush) - 1
+
+# 0 is non fraud, 1 is fraud
+table(train_numeric$Orderbrush)
+
+# perform smote on train data 
+train_smote <- SMOTE(X = train_numeric, target=train_numeric$Orderbrush, dup_size = 10)
+train_smote_data <- train_smote$data
+train_smote_data$Orderbrush <- as.factor(train_smote_data$Orderbrush)
+levels(train_smote_data$Orderbrush) <- c("No", "Yes")
+train_smote_data <- subset(train_smote_data, select = -c(class))
+table(train_smote_data$Orderbrush)
+```
+
+## General Visualization Plot 
+```{r error=FALSE,message=FALSE,warning=FALSE}
+
+ggplot(data, aes(x=Orderbrush, fill=Shop.Followers.Cat) ) + geom_bar(position="dodge", stat= "count") + ylim(0,1000)
+
+
+ggplot(data, aes(x=Orderbrush, y=Shop.Rating.Value) ) + geom_boxplot(aes(fill=Shop.Rating.Value))
+ggplot(data, aes(x=Orderbrush, y=Count.of.Order) ) + geom_boxplot(aes(fill=Count.of.Order)) + ylim(0,1000)
+ggplot(data, aes(x=Orderbrush, y=Hour) ) + geom_boxplot(aes(fill=Hour))
+ggplot(data, aes(x=Orderbrush, y=Total.Comments) ) + geom_boxplot(aes(fill=Total.Comments)) + ylim(0,40000)
+ggplot(data, aes(x=Orderbrush, y=Bad.Comments) ) + geom_boxplot(aes(fill=Bad.Comments)) + ylim(0,2000)
+
+plot(data$Total.Comments, col=c("lightgrey","red")[data$Orderbrush])
+plot(data$Count.of.Order, col=c("lightgrey","red")[data$Orderbrush])
+
+
+ggplot(data, aes(Shop.Rating.Value, Orderbrush, colour=Shop.Rating.Value)) + geom_point(alpha=0.3) + theme(legend.position = "top") + labs(title="template") + geom_smooth(method="loess", se=FALSE)
+
+```
+
+## Correlation plot
+```{r error=FALSE,message=FALSE,warning=FALSE}
+
+cor_data <- cor(x = data_numeric[sapply(data_numeric, is.numeric)], method="pearson")
+round(cor_data,2)
+correlation_plot <- corrplot(cor_data)
+```
+
+## Random Forest (Default - Train test)
+```{r error=FALSE,message=FALSE,warning=FALSE}
+
+train_numeric$Orderbrush <- as.factor(train_numeric$Orderbrush)
+test_numeric$Orderbrush <- as.factor(test_numeric$Orderbrush)
+levels(train_numeric$Orderbrush) <- c("No", "Yes")
+levels(test_numeric$Orderbrush) <- c("No", "Yes")
+
+rf_model_default <- randomForest(formula = Orderbrush ~ ., data=train_numeric)
+p_rf <- predict(rf_model_default, newdata=test_numeric)
+confusionMatrix(as.factor(test_numeric$Orderbrush), p_rf ,mode = "prec_recall", positive="Yes")
+
+varImpPlot(rf_model_default)
+varImp(rf_model_default)
+
+```
+
+
+## Random Forest (SMOTE)
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+rf_model <- randomForest(formula = Orderbrush ~ ., data=train_smote_data )
+p_rf <- predict(rf_model, newdata=test_numeric)
+confusionMatrix(test_numeric$Orderbrush, p_rf)
+
+varImpPlot(rf_model)
+varImp(rf_model)
+```
+
+## Random Forest (10 fold With undersample and preprocessing)
+
+We use the caret package to run a repeated cross validation over 10 folds. 
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+# RF - CARET
+ctrl <- trainControl(method = "repeatedcv",
+                     number = 10,
+                     repeats = 10,
+                     verboseIter = FALSE,
+                     sampling = "down")
+
+random_f_model <- caret::train(Orderbrush ~ .,
+                                   data = train,
+                                   method = "rf",
+                                   preProcess = c("scale", "center"),
+                                   trControl = ctrl)
+
+p_rf2 <- predict(random_f_model, newdata=test)
+confusionMatrix(as.factor(test$Orderbrush), p_rf2, mode = "prec_recall", positive="Yes")
+table(test$Orderbrush)
+varImp(random_f_model, scale=FALSE)
+plot(varImp(random_f_model, scale=FALSE))   
+```
+## Random Forest (10 fold with undersample and scale center preprocessing) 
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+ctrl <- trainControl(method = "repeatedcv",
+                     number = 10,
+                     repeats = 10,
+                     verboseIter = FALSE,
+                     sampling="down")
+
+random_f_model <- caret::train(Orderbrush ~ .,
+                                   data = train,
+                                   method = "rf",
+                                   preProcess = c("scale", "center"),
+                                   trControl = ctrl)
+
+p_rf2 <- predict(random_f_model, newdata=test)
+confusionMatrix(as.factor(test_numeric$Orderbrush), p_rf2, mode = "prec_recall", positive="Yes")
+table(test$Orderbrush)
+varImp(random_f_model, scale=FALSE)
+plot(varImp(random_f_model, scale=FALSE)) 
+
+```
+
+## Random Forest (10 fold with undersample and normalization preprocessing)
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+ctrl <- trainControl(method = "repeatedcv",
+                     number = 10,
+                     repeats = 10,
+                     verboseIter = FALSE,
+                     sampling="down")
+
+random_f_model <- caret::train(Orderbrush ~ Shop.Follower.Count + Shop.Rating.Value + Bad.Comments + Normal.Comments + Good.Comments + Total.Comments + Shop.Response.Rate + Count.of.Order + Hour,
+                                   data = train,
+                                   method = "rf",
+                                   preProcess = c("range"),
+                                   trControl = ctrl)
+
+p_rf2 <- predict(random_f_model, newdata=test)
+confusionMatrix(as.factor(test$Orderbrush), p_rf2, mode = "prec_recall", positive="Yes")
+table(test$Orderbrush)
+varImp(random_f_model, scale=FALSE)
+plot(varImp(random_f_model, scale=FALSE)) 
+
+```
+
+
+## Naive Bayes 
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+
+model2 <- naive_bayes(Orderbrush~., data= train, laplace=1);
+p <- predict(model2, newData=test)
+
+summary(model2)
+
+```
+
