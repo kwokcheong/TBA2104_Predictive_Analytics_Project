@@ -29,6 +29,8 @@ library(vcd)
 library(gridExtra)
 library(ggeffects)
 library(smotefamily)
+library(ROCR)
+library(mlbench)
 ```
 
 ## Data Preprocess
@@ -219,3 +221,218 @@ summary(model2)
 
 ```
 
+
+## Logistic Regression method 1 
+
+Receiver Operator Characteristic (ROC) and Area Under the Curve (AUC) are typical performance measurements for a binary classifier. 
+
+ROC curve closer to the top-left corner indicate a better performance.
+
+AUC between 0.5 to 1 mean the model with good predictive ability.
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+
+train$Orderbrush <- as.factor(train$Orderbrush)
+model3 <- glm(Orderbrush ~., family = binomial(link='logit'), data = train)
+summary(model3)
+
+fitted.results <- predict(model3, newdata = test, type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+
+misClasificError <- mean(fitted.results != test$Orderbrush)
+print(paste('Accuracy',1-misClasificError))
+
+p <- predict(model3, newdata = test, type="response")
+pr <- prediction(p, test$Orderbrush)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf)
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]]
+print(auc)
+
+```
+
+
+## Logistic Regression method 2 
+
+We used glm method which specifies that we will fit a generalized linear model.
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+
+ctrl <- trainControl(method = "repeatedcv",
+                     number = 10,
+                     repeats = 10,
+                     verboseIter = FALSE,
+                     sampling = "down")
+
+metric <- "Accuracy"
+tuneLength <- 10
+
+train$Orderbrush <- as.factor(train$Orderbrush)
+
+logistic_r_model <- caret::train(Orderbrush ~ .,
+                               data = train,
+                               method = "glm",
+                               metric=metric,
+                               preProcess = c("scale", "center"),
+                               trControl = ctrl,
+                               tuneLength = tuneLength)
+
+print(logistic_r_model)
+plot(varImp(logistic_r_model, scale=FALSE))
+
+```
+
+## Support Vector Machines (SVM) Linear Classifier
+
+We used SVM linear classifier, the variables are normalized to make their scale comparable.
+
+Tuning parameter C (Cost) is to determine the possible misclassifications.
+The higher the value of C, the less likely it is that the SVM algorithm will misclassify a point.
+
+We build using the default C = 1. The accuracy of this model is 0.8880263.
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+
+ctrl <- trainControl(method = "repeatedcv",
+                     number = 10,
+                     repeats = 10,
+                     verboseIter = FALSE,
+                     sampling = "down")
+
+train$Orderbrush <- as.factor(train$Orderbrush)
+
+svm_model <- caret::train(Orderbrush ~ .,
+                                 data = train,
+                                 method = "svmLinear",
+                                 preProcess = c("scale", "center"),
+                                 trControl = ctrl)
+
+print(svm_model)
+plot(varImp(svm_model, scale=FALSE))
+
+# Make predictions on the test data
+predicted.classes <- svm_model %>% predict(test)
+# Compute model accuracy rate
+accuracy_rate <- mean(predicted.classes == test$Orderbrush)
+print(accuracy_rate)
+
+```
+
+
+## Support Vector Machines (SVM) Linear with Choice of Cost
+
+We compute SVM for a grid values of C and choose automatically the final model for predictions.
+
+The choice of C = 0.2105263 provides an Accuracy of 0.8817566 which is a slight improvement over the first SVM where C was held constant at 1 (Accuracy = 0.8880263).
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+
+svm_model2 <- caret::train(Orderbrush ~ .,
+                          data = train,
+                          method = "svmLinear",
+                          preProcess = c("scale", "center"),
+                          trControl = ctrl,
+                          tuneGrid = expand.grid(C = seq(0, 2, length = 20)))
+
+print(svm_model2)
+plot(varImp(svm_model2, scale=FALSE))
+
+# Plot model accuracy vs different values of Cost
+plot(svm_model2)
+
+# Print the best tuning parameter C that
+# maximizes model accuracy
+svm_model2$bestTune
+
+# Make predictions on the test data
+predicted.classes2 <- svm_model2 %>% predict(test)
+# Compute model accuracy rate
+accuracy_rate2 <- mean(predicted.classes2 == test$Orderbrush)
+print(accuracy_rate2)
+
+```
+
+
+## Support Vector Machines (SVM) Non-Linear Kernel (Radial)
+
+We used radial kernel function to build non-linear SVM classifier.
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+
+ctrl <- trainControl(method = "repeatedcv",
+                     number = 10,
+                     repeats = 10,
+                     verboseIter = FALSE,
+                     sampling = "down")
+
+svm_model3 <- caret::train(Orderbrush ~ .,
+                          data = train,
+                          method = "svmRadial",
+                          preProcess = c("scale", "center"),
+                          trControl = ctrl,
+                          tuneLength = 10)
+
+print(svm_model3)
+plot(varImp(svm_model3, scale=FALSE))
+
+# Print the best tuning parameter C that
+# maximizes model accuracy
+svm_model3$bestTune
+
+# Make predictions on the test data
+predicted.classes3 <- svm_model3 %>% predict(test)
+# Compute model accuracy rate
+accuracy_rate3 <- mean(predicted.classes3 == test$Orderbrush)
+print(accuracy_rate3)
+
+```
+
+
+## Support Vector Machines (SVM) Non-Linear Kernel (Polynomial)
+
+We used polynomial kernel function to build non-linear SVM classifier.
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+
+ctrl <- trainControl(method = "repeatedcv",
+                     number = 10,
+                     repeats = 10,
+                     verboseIter = FALSE,
+                     sampling = "down")
+
+svm_model4 <- caret::train(Orderbrush ~ .,
+                          data = train,
+                          method = "svmPoly",
+                          preProcess = c("scale", "center"),
+                          trControl = ctrl,
+                          tuneLength = 4)
+
+print(svm_model4)
+plot(varImp(svm_model4, scale=FALSE))
+
+# Print the best tuning parameter C that
+# maximizes model accuracy
+svm_model4$bestTune
+
+# Make predictions on the test data
+predicted.classes4 <- svm_model4 %>% predict(test)
+# Compute model accuracy rate
+accuracy_rate4 <- mean(predicted.classes4 == test$Orderbrush)
+print(accuracy_rate4)
+
+```
+
+
+## Support Vector Machines (SVM) Comparison
+
+Compare all 4 methods, linear and non-linear.
+
+It shown that the SVM classifier using non-linear kernel polynomial gives a better result compared to the linear model.
+
+```{r error=FALSE,message=FALSE,warning=FALSE}
+
+df <- tibble(Model = c('SVM Linear','SVM Linear w/ choice of cost','SVM Radial','SVM Poly'), Accuracy = c(accuracy_rate, accuracy_rate2, accuracy_rate3, accuracy_rate4))
+df %>% arrange(Accuracy)
+
+```
