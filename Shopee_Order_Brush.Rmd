@@ -215,9 +215,15 @@ plot(varImp(random_f_model, scale=FALSE))
 ```{r error=FALSE,message=FALSE,warning=FALSE}
 
 model2 <- naive_bayes(Orderbrush~., data= train, laplace=1);
-p <- predict(model2, newData=test)
+p <- predict(model2, test)
 
-summary(model2)
+confusionMatrix(test$Orderbrush, p, mode = "prec_recall", positive="Yes")
+table(test$Orderbrush)
+
+model3 <- naive_bayes(Orderbrush~., data= train_smote_data, laplace=1)
+p_smote <- predict(model3, test)
+confusionMatrix(test$Orderbrush, p_smote, mode = "prec_recall", positive="Yes")
+
 
 ```
 
